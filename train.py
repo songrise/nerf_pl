@@ -42,7 +42,8 @@ class NeRFSystem(LightningModule):
             self.models += [self.nerf_fine]
 
     def decode_batch(self, batch):
-        rays = batch['rays'] # (B, 8)
+        #! Jun 18: r_0, r_d, near, far
+        rays = batch['rays'] # (B, 8) 
         rgbs = batch['rgbs'] # (B, 3)
         return rays, rgbs
 
@@ -87,6 +88,7 @@ class NeRFSystem(LightningModule):
         return [self.optimizer], [scheduler]
 
     def train_dataloader(self):
+        #! Jun 18: todo revise the dataloader
         return DataLoader(self.train_dataset,
                           shuffle=True,
                           num_workers=4,
@@ -101,8 +103,10 @@ class NeRFSystem(LightningModule):
                           pin_memory=True)
     
     def training_step(self, batch, batch_nb):
+        #! Jun 18:  batch: rays [1024, 8], rgbs [1024, 3]
         log = {'lr': get_learning_rate(self.optimizer)}
         rays, rgbs = self.decode_batch(batch)
+        #! Jun 18: inference here
         results = self(rays)
         log['train/loss'] = loss = self.loss(results, rgbs)
         typ = 'fine' if 'rgb_fine' in results else 'coarse'

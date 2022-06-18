@@ -195,6 +195,7 @@ class LLFFDataset(Dataset):
         # Step 2: correct poses
         # Original poses has rotation in form "down right back", change to "right up back"
         # See https://github.com/bmild/nerf/issues/34
+        #! Jun 18: should be the pose of the pinhole camera
         poses = np.concatenate([poses[..., 1:2], -poses[..., :1], poses[..., 2:4]], -1)
                 # (N_images, 3, 4) exclude H, W, focal
         self.poses, self.pose_avg = center_poses(poses)
@@ -213,7 +214,7 @@ class LLFFDataset(Dataset):
         # ray directions for all pixels, same for all images (same H, W, focal)
         self.directions = \
             get_ray_directions(self.img_wh[1], self.img_wh[0], self.focal) # (H, W, 3)
-            
+        #! Jun 18: [378, 503, 3]
         if self.split == 'train': # create buffer of all rays and rgb data
                                   # use first N_images-1 to train, the LAST is val
             self.all_rays = []
@@ -248,7 +249,7 @@ class LLFFDataset(Dataset):
                                              near*torch.ones_like(rays_o[:, :1]),
                                              far*torch.ones_like(rays_o[:, :1])],
                                              1)] # (h*w, 8)
-                                 
+            #! Jun 18: in nerf-pytorch, this is one tensor rays_rgb                    
             self.all_rays = torch.cat(self.all_rays, 0) # ((N_images-1)*h*w, 8)
             self.all_rgbs = torch.cat(self.all_rgbs, 0) # ((N_images-1)*h*w, 3)
         
