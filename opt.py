@@ -25,8 +25,8 @@ def get_opts():
     parser.add_argument('--noise_std', type=float, default=1.0,
                         help='std dev of noise added to regularize sigma')
         
-    parser.add_argument('--loss_type', type=str, default='mse',
-                        choices=['mse'],
+    parser.add_argument('--loss_type', type=str, default='dirClip',
+                        choices=['mse','dirClip'],
                         help='loss to use')
 
     parser.add_argument('--batch_size', type=int, default=1024,
@@ -38,7 +38,7 @@ def get_opts():
     parser.add_argument('--num_gpus', type=int, default=1,
                         help='number of gpus')
 
-    parser.add_argument('--ckpt_path', type=str, default=None,
+    parser.add_argument('--ckpt_path', type=str, default="/root/nerf_pl/ckpts/room/epoch=14.ckpt",
                         help='pretrained checkpoint path to load')
     parser.add_argument('--prefixes_to_ignore', nargs='+', type=str, default=['loss'],
                         help='the prefixes to ignore in the checkpoint state dict')
@@ -72,7 +72,17 @@ def get_opts():
                         help='exponent for polynomial learning rate decay')
     ###########################
 
-    parser.add_argument('--exp_name', type=str, default='exp',
+    parser.add_argument('--exp_name', type=str, default='room_clip',
                         help='experiment name')
+
+    ###########################
+    #! Jun 19: mod
+
+    parser.add_argument('--stride', type = int, default = 3, help = 'stride of the image')
+    parser.add_argument("--use_clip", action='store_true', default = False, help='whether use clip loss')
+    parser.add_argument("--patch_size", type=int, default=2500, help='number of pixels in a patch')
+    #! only take effect when clip is on
+    parser.add_argument("--src_text", type=str, default='photo', help='description of source')
+    parser.add_argument("--target_text", type=str, default='cubic', help='description of target')
 
     return parser.parse_args()

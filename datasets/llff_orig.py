@@ -1,10 +1,3 @@
-# -*- coding : utf-8 -*-
-# @FileName  : llff_subsampled.py
-# @Author    : Ruixiang JIANG (Songrise)
-# @Time      : Jun 19, 2022
-# @Github    : https://github.com/songrise
-# @Description: A stride sampled version of LLFF dataset.
-
 import torch
 from torch.utils.data import Dataset
 import glob
@@ -12,7 +5,6 @@ import numpy as np
 import os
 from PIL import Image
 from torchvision import transforms as T
-from .sample_util import *
 
 from .ray_utils import *
 
@@ -164,8 +156,8 @@ def create_spheric_poses(radius, n_poses=120):
     return np.stack(spheric_poses, 0)
 
 
-class LLFFDataset(Dataset):
-    def __init__(self, root_dir, split='train', img_wh=(504, 378), spheric_poses=False, val_num=1, stride=1, patch_size=1600):
+class LLFFDatasetOrig(Dataset):
+    def __init__(self, root_dir, split='train', img_wh=(504, 378), spheric_poses=False, val_num=1):
         """
         spheric_poses: whether the images are taken in a spheric inward-facing manner
                        default: False (forward-facing)
@@ -175,8 +167,6 @@ class LLFFDataset(Dataset):
         self.split = split
         self.img_wh = img_wh
         self.spheric_poses = spheric_poses
-        self.stride = stride
-        self.patch_size = patch_size
         self.val_num = max(1, val_num) # at least 1
         self.define_transforms()
 
@@ -225,18 +215,6 @@ class LLFFDataset(Dataset):
         self.directions = \
             get_ray_directions(self.img_wh[1], self.img_wh[0], self.focal) # (H, W, 3)
         #! Jun 18: [378, 503, 3]
-
-        #! Jun 19: temp tensor to store all_rays in nwhc format
-        H, W = self.img_wh[1], self.img_wh[0]
-        #! Jun 19:  this near & far is for spherical
-        near = self.bounds.min()
-        far = min(8 * near, self.bounds.max())# todo check this
-        # nhwc_rays = torch.zeros((N_images, H, W, 8), dtype=torch.float32)
-        nhwc_rays = []
-        nhwc_imgs = []
-        # for i in range(N_images):
-        #     nhwc[i] = self.directions.clone()
-        # self.all_rays = nhwc.permute(0, 3, 1, 2)
         if self.split == 'train': # create buffer of all rays and rgb data
                                   # use first N_images-1 to train, the LAST is val
             self.all_rays = []
@@ -253,13 +231,7 @@ class LLFFDataset(Dataset):
                 img = img.resize(self.img_wh, Image.LANCZOS)
                 img = self.transform(img) # (3, h, w)
                 img = img.view(3, -1).permute(1, 0) # (h*w, 3) RGB
-                #! Jun 19: also process image with stride-sampling
-                img = img.view(H,W,3)
-                img = torch.unsqueeze(img, 0) # (1, h, w, 3)
-                img_sampled, _ = sample_img(img, self.stride,retain=True) # (s**2, h//2, w//2, 3)
-                img_patched = patchify_img(img_sampled, self.patch_size) # (s**2 * h//2 * w//2, 3)
-                # random permute the img_patched
-                nhwc_imgs += [torch.from_numpy(img_patched).float()]
+                self.all_rgbs += [img]
                 
                 rays_o, rays_d = get_rays(self.directions, c2w) # both (h*w, 3)
                 if not self.spheric_poses:
@@ -272,44 +244,16 @@ class LLFFDataset(Dataset):
                 else:
                     near = self.bounds.min()
                     far = min(8 * near, self.bounds.max()) # focus on central object only
-
-                #! Jun 19: make NHWC rays
-                rays_o = rays_o.view(H, W, 3) # (h, w, 3)
-                rays_d = rays_d.view(H, W, 3) # (h, w, 3)
-                rays_near = near*torch.ones_like(rays_o[:, :, :1]) # (h, w, 1)
-                rays_far = far*torch.ones_like(rays_o[:, :, :1])   # (h, w, 1)
-                #cat along the channel dimension
-                img_rays = torch.cat([rays_o, rays_d, rays_near, rays_far], dim=2) # (h, w, 8)
-                img_rays = torch.unsqueeze(img_rays, 0) # (1, h, w, 8)
-                #! Jun 19: Step 5: do sampling (1, h, w, 8) -> (s**2,h//2,w//2,8) retain for default.
-                img_rays_sampled,_ = sample_img(img_rays, self.stride, retain=True) # (s**2,h//2,w//2,8)
-                img_rays_patched = patchify_img(img_rays_sampled, self.patch_size)
-                nhwc_rays += [torch.from_numpy(img_rays_patched).float()]
-
-
                 #! Jun 19: todo first, construct a (N, h, w, 8) tensor of all rays,
                 #! Then, use the sampling strategy to generate the (N*s**2,h/s,w/s,8) tensor of rays
                 #! lastly, flatten them into ((N_images-1)*h*w, 8).
-                # self.all_rays += [torch.cat([rays_o, rays_d, 
-                #                              near*torch.ones_like(rays_o[:, :1]),
-                #                              far*torch.ones_like(rays_o[:, :1])],
-                #                              1)] # (h*w, 8)
-            
-            #! Jun 18: in nerf-pytorch, this is one tensor rays_rgb 
-            #! Step 6 flatten nhwc format to (N_images-1)*h*w, 8)
-            # cast to tensor
-            # todo shuffle the order of rays and imgs.
-            #! Jun 19: move this to sampler
-            shuffle_idx = torch.randperm(len(nhwc_rays)) # (N_images-1)
-            nhwc_rays = [nhwc_rays[i] for i in shuffle_idx]
-            nhwc_imgs = [nhwc_imgs[i] for i in shuffle_idx]
-            
-            nhwc_rays = torch.cat(nhwc_rays, 0) 
-            nhwc_imgs = torch.cat(nhwc_imgs, 0) # (s**2* h//2* w//2, 3)
-            self.all_rays = nhwc_rays
-            self.all_rgbs = nhwc_imgs
-            # self.all_rays = torch.cat(self.all_rays, 0) # ((N_images-1)*h*w, 8)
-            # self.all_rgbs = torch.cat(self.all_rgbs, 0) # ((N_images-1)*h*w, 3)
+                self.all_rays += [torch.cat([rays_o, rays_d, 
+                                             near*torch.ones_like(rays_o[:, :1]),
+                                             far*torch.ones_like(rays_o[:, :1])],
+                                             1)] # (h*w, 8)
+            #! Jun 18: in nerf-pytorch, this is one tensor rays_rgb                    
+            self.all_rays = torch.cat(self.all_rays, 0) # ((N_images-1)*h*w, 8)
+            self.all_rgbs = torch.cat(self.all_rgbs, 0) # ((N_images-1)*h*w, 3)
         
         elif self.split == 'val':
             print('val image is', self.image_paths[val_idx])

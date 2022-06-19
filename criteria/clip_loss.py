@@ -15,7 +15,7 @@ import math
 import clip
 from PIL import Image
 
-from text_templates import imagenet_templates, part_templates, imagenet_templates_small
+from criteria.text_templates import imagenet_templates, part_templates, imagenet_templates_small
 
 class DirectionLoss(torch.nn.Module):
     def __init__(self, loss_type='mse'):
@@ -39,8 +39,8 @@ class CLIPLoss(torch.nn.Module):
     def __init__(self, device, lambda_direction=1., lambda_patch=0., lambda_global=0., lambda_manifold=0., lambda_texture=0., patch_loss_type='mae', direction_loss_type='cosine', clip_model='ViT-B/32'):
         super(CLIPLoss, self).__init__()
 
-        self.device = device
-        self.model, clip_preprocess = clip.load(clip_model, device=self.device)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model, clip_preprocess = clip.load("ViT-B/32", device=self.device)
 
         self.clip_preprocess = clip_preprocess
         

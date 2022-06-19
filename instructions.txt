@@ -5,10 +5,32 @@ python train.py \
    --num_epochs 30 --batch_size 1024 \
    --optimizer adam --lr 5e-4 \
    --lr_scheduler steplr --decay_step 10 20 --decay_gamma 0.5 \
-   --exp_name room  --ckpt_path /root/nerf_pl/ckpts/room/epoch=14.ckpt
+   --exp_name room_clip_test  
 
+nohup python train.py \
+   --dataset_name llff \
+   --root_dir "../ClipNeRF_base/data/nerf_llff_data/room/" \
+   --N_importance 64 --img_wh 504 378 \
+   --num_epochs 30 --batch_size 1024 \
+   --optimizer adam --lr 5e-4 \
+   --lr_scheduler steplr --decay_step 10 20 --decay_gamma 0.5 \
+   --exp_name room_clip_test  
+   --ckpt_path /root/nerf_pl/ckpts/room_tese/epoch=0.ckpt &
 
 python eval.py \
    --root_dir "/root/ClipNeRF_base/data/nerf_llff_data/room/" \
    --dataset_name llff --scene_name room \
    --img_wh 504 378 --N_importance 64 --ckpt_path /root/nerf_pl/ckpts/room/epoch=14.ckpt
+
+# fine tune with clip
+nohup python train.py \
+   --dataset_name llff \
+   --root_dir "../ClipNeRF_base/data/nerf_llff_data/room/" \
+   --N_importance 64 --img_wh 504 378 \
+   --num_epochs 30 --batch_size 1024 \
+   --optimizer adam --lr 1e-5 \
+   --lr_scheduler steplr --decay_step 10 20 --decay_gamma 0.5 \
+   --exp_name room_clip  
+   --loss_type "dirClip" &
+
+nohup  tensorboard --logdir logs/ & 
