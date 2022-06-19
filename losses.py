@@ -37,3 +37,9 @@ class DirClipLoss(nn.Module):
 
 loss_dict = {'mse': MSELoss,
             'dirClip':DirClipLoss}
+
+if __name__ == "__main__":
+    device = torch.device('cuda:0')
+    dirLoss = DirClipLoss(device)
+    for _ in dirLoss.parameters():
+        print(_)

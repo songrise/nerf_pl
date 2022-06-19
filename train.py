@@ -18,6 +18,7 @@ from utils import *
 
 # losses
 from losses import loss_dict
+from losses import DirClipLoss
 
 # metrics
 from metrics import *
@@ -35,7 +36,7 @@ class NeRFSystem(LightningModule):
         if hparams.loss_type == 'mse':
             self.loss = loss_dict[hparams.loss_type]()
         elif hparams.loss_type == 'dirClip':
-            self.loss = loss_dict[hparams.loss_type](self.device)
+            self.clip_loss = DirClipLoss(self.device)
         self.embedding_xyz = Embedding(3, 10) # 10 is the default number
         self.embedding_dir = Embedding(3, 4) # 4 is the default number
         self.embeddings = [self.embedding_xyz, self.embedding_dir]
@@ -45,6 +46,9 @@ class NeRFSystem(LightningModule):
         if hparams.N_importance > 0:
             self.nerf_fine = NeRF()
             self.models += [self.nerf_fine]
+        #! Jun 19: add clip models
+        if hparams.loss_type == 'dirClip':
+            self.models += [self.clip_loss]
 
     def decode_batch(self, batch):
         #! Jun 18: r_0, r_d, near, far
@@ -122,8 +126,8 @@ class NeRFSystem(LightningModule):
         results = self(rays)
         if self.hparams.loss_type == 'mse':
             log['train/loss'] = loss = self.loss(results, rgbs)
-        elif self.hparams.loss_type == 'dir_clip':
-            log['train/clip_loss'] = loss = self.loss(rgbs,self.hparams.src_text, results, self.hparams.target_text)
+        elif self.hparams.loss_type == 'dirClip':
+            log['train/clip_loss'] = loss = self.clip_loss(rgbs,self.hparams.src_text, results, self.hparams.target_text)
         #! dump rgbs to test
         # import pickle
         # with open('test_rgbs.pkl', 'wb') as f:
