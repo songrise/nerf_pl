@@ -20,20 +20,30 @@ class DirClipLoss(nn.Module):
         super(DirClipLoss, self).__init__()
         self.loss = CLIPLoss(device)
 
-    def forward(self, src_img, src_text, results, target_text):
+
+    def forward(self, src_img, src_text, results, target_text, H = 50, W = 50):
         #! Jun 18: the "inputs" is the dict of results from the model
+        H, W = int(H), int(W)
+
         target_img = results['rgb_fine']
-        target_img = torch.squeeze(0)
-        target_img = torch.view(50,50,3) #todo remove magic size
-        src_img = torch.squeeze(0)
-        src_img = torch.view(50,50,3) #todo remove magic size
+        target_img = self.cvt_CHW(target_img, H, W)
+        src_img = self.cvt_CHW(src_img, H, W)
+
         loss = self.loss.clip_directional_loss(src_img, src_text, target_img, target_text)
         if 'rgb_coarse' in results:
             target_img_coarse = results['rgb_coarse']
-            target_img_coarse = torch.squeeze(0)
-            target_img_coarse = torch.view(50,50,3) #todo remove magic size
+            target_img_coarse = self.cvt_CHW(target_img_coarse, H, W)
+
             loss += self.loss.clip_directional_loss(src_img, src_text, target_img_coarse, target_text)
         return loss
+    
+    def cvt_CHW(self, img:torch.Tensor, H, W):
+        """
+        convert (1, H, W, 3) to (1, 3, H, W)
+        """
+        img = img.view(1, H, W, 3) 
+        img = img.permute(0, 3, 1, 2) # (1, 3, H, W) 
+        return img
 
 loss_dict = {'mse': MSELoss,
             'dirClip':DirClipLoss}
@@ -41,5 +51,5 @@ loss_dict = {'mse': MSELoss,
 if __name__ == "__main__":
     device = torch.device('cuda:0')
     dirLoss = DirClipLoss(device)
-    for _ in dirLoss.parameters():
-        print(_)
+    # for _ in dirLoss.parameters():
+    #     print(_)

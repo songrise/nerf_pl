@@ -33,10 +33,12 @@ class NeRFSystem(LightningModule):
         super(NeRFSystem, self).__init__()
         self.hparams = hparams
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self
         if hparams.loss_type == 'mse':
             self.loss = loss_dict[hparams.loss_type]()
         elif hparams.loss_type == 'dirClip':
-            self.clip_loss = DirClipLoss(self.device)
+            #! Jun 20: else, init loss 
+            pass
         self.embedding_xyz = Embedding(3, 10) # 10 is the default number
         self.embedding_dir = Embedding(3, 4) # 4 is the default number
         self.embeddings = [self.embedding_xyz, self.embedding_dir]
@@ -47,8 +49,8 @@ class NeRFSystem(LightningModule):
             self.nerf_fine = NeRF()
             self.models += [self.nerf_fine]
         #! Jun 19: add clip models
-        if hparams.loss_type == 'dirClip':
-            self.models += [self.clip_loss]
+        # if hparams.loss_type == 'dirClip':
+        #     self.models += [self.clip_loss]
 
     def decode_batch(self, batch):
         #! Jun 18: r_0, r_d, near, far
@@ -92,11 +94,16 @@ class NeRFSystem(LightningModule):
         self.train_dataset = dataset(split='train', **kwargs)
         self.val_dataset = dataset(split='val', **kwargs)
 
+        #! Jun 20:  init clip loss here
+
+
     def configure_optimizers(self):
         self.optimizer = get_optimizer(self.hparams, self.models)
-        scheduler = get_scheduler(self.hparams, self.optimizer)
+        # scheduler = get_scheduler(self.hparams, self.optimizer)
         
-        return [self.optimizer], [scheduler]
+        # return [self.optimizer], [scheduler]
+        return [self.optimizer]
+
 
     def train_dataloader(self):
         #! Jun 19: permute patches
@@ -120,14 +127,18 @@ class NeRFSystem(LightningModule):
     
     def training_step(self, batch, batch_nb):
         #! Jun 18:  batch: rays [1024, 8], rgbs [1024, 3]
+        if self.global_step % 2000 == 0:
+            self.trainer.save_checkpoint()
         log = {'lr': get_learning_rate(self.optimizer)}
         rays, rgbs = self.decode_batch(batch)
         #! Jun 18: inference here
         results = self(rays)
+
+
         if self.hparams.loss_type == 'mse':
             log['train/loss'] = loss = self.loss(results, rgbs)
         elif self.hparams.loss_type == 'dirClip':
-            log['train/clip_loss'] = loss = self.clip_loss(rgbs,self.hparams.src_text, results, self.hparams.target_text)
+            log['train/clip_loss'] = loss = self.loss(rgbs,self.hparams.src_text, results, self.hparams.target_text)
         #! dump rgbs to test
         # import pickle
         # with open('test_rgbs.pkl', 'wb') as f:
@@ -151,13 +162,24 @@ class NeRFSystem(LightningModule):
         rays = rays.squeeze() # (H*W, 3)
         rgbs = rgbs.squeeze() # (H*W, 3)
         results = self(rays)
-        log = {'val_loss': self.loss(results, rgbs)}
+        
+        if self.hparams.loss_type == 'dirClip':
+            self.loss = DirClipLoss(self.device)
+            print("Clip loss model loaded")
+
+        if self.hparams.loss_type == 'mse':
+            log = {'val_loss': self.loss(results, rgbs)}
+        elif self.hparams.loss_type == 'dirClip':
+            #todo check hw
+            log = {'val_loss': self.loss(rgbs,self.hparams.src_text, results, self.hparams.target_text, H=self.hparams.img_wh[0], W=self.hparams.img_wh[1])}
+
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
     
         if batch_nb == 0:
             W, H = self.hparams.img_wh
             img = results[f'rgb_{typ}'].view(H, W, 3).cpu()
             img = img.permute(2, 0, 1) # (3, H, W)
+            # assume the gt and pred are always in the same scale
             img_gt = rgbs.view(H, W, 3).permute(2, 0, 1).cpu() # (3, H, W)
             depth = visualize_depth(results[f'depth_{typ}'].view(H, W)) # (3, H, W)
             stack = torch.stack([img_gt, img, depth]) # (3, 3, H, W)
@@ -205,6 +227,7 @@ if __name__ == '__main__':
                       distributed_backend='ddp' if hparams.num_gpus>1 else None,
                       num_sanity_val_steps=1,
                       benchmark=True,
-                      profiler=hparams.num_gpus==1)
+                      profiler=hparams.num_gpus==1,
+                      val_check_interval=0.1)
 
     trainer.fit(system)

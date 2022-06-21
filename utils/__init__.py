@@ -2,7 +2,7 @@
 from torch.optim import SGD, Adam
 from .optimizers import *
 # scheduler
-from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR, LambdaLR
 from .warmup_scheduler import GradualWarmupScheduler
 
 from .visualization import *
@@ -14,10 +14,10 @@ def get_optimizer(hparams, models):
         parameters += list(model.parameters())
     if hparams.optimizer == 'sgd':
         optimizer = SGD(parameters, lr=hparams.lr, 
-                        momentum=hparams.momentum, weight_decay=hparams.weight_decay)
+                        momentum=0.0, weight_decay=0.0)
     elif hparams.optimizer == 'adam':
-        optimizer = Adam(parameters, lr=hparams.lr, eps=eps, 
-                         weight_decay=hparams.weight_decay)
+        optimizer = Adam(parameters, lr=1e-6, eps=eps, 
+                         weight_decay=hparams.weight_decay)#todo magic
     elif hparams.optimizer == 'radam':
         optimizer = RAdam(parameters, lr=hparams.lr, eps=eps, 
                           weight_decay=hparams.weight_decay)
@@ -39,6 +39,8 @@ def get_scheduler(hparams, optimizer):
     elif hparams.lr_scheduler == 'poly':
         scheduler = LambdaLR(optimizer, 
                              lambda epoch: (1-epoch/hparams.num_epochs)**hparams.poly_exp)
+    # elif hparams.lr_scheduler == 'constant':
+    #     scheduler = ConstantLR(optimizer, lr=hparams.lr)
     else:
         raise ValueError('scheduler not recognized!')
 
@@ -50,6 +52,7 @@ def get_scheduler(hparams, optimizer):
 
 def get_learning_rate(optimizer):
     for param_group in optimizer.param_groups:
+        param_group['lr'] = 1e-4
         return param_group['lr']
 
 def extract_model_state_dict(ckpt_path, model_name='model', prefixes_to_ignore=[]):

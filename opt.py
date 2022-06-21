@@ -46,7 +46,7 @@ def get_opts():
     parser.add_argument('--optimizer', type=str, default='adam',
                         help='optimizer type',
                         choices=['sgd', 'adam', 'radam', 'ranger'])
-    parser.add_argument('--lr', type=float, default=5e-4,
+    parser.add_argument('--lr', type=float, default=1e-6,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='learning rate momentum')
@@ -80,9 +80,9 @@ def get_opts():
 
     parser.add_argument('--stride', type = int, default = 3, help = 'stride of the image')
     parser.add_argument("--use_clip", action='store_true', default = False, help='whether use clip loss')
-    parser.add_argument("--patch_size", type=int, default=2500, help='number of pixels in a patch')
+    parser.add_argument("--patch_size", type=int, default=3600, help='number of pixels in a patch')
     #! only take effect when clip is on
-    parser.add_argument("--src_text", type=str, default='photo', help='description of source')
-    parser.add_argument("--target_text", type=str, default='cubic', help='description of target')
+    parser.add_argument("--src_text", type=str, default='Photo', help='description of source')
+    parser.add_argument("--target_text", type=str, default='Cubism', help='description of target')
 
     return parser.parse_args()
